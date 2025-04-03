@@ -99,6 +99,10 @@ class _MyHomePageState extends State<MyHomePage> {
           BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
         ],
+        currentIndex: 0,
+        onTap: (index) {
+          // TODO: Handle navigation
+        },
       ),
     );
   }
