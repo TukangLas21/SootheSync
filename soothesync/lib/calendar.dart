@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:soothesync/home.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 class CalendarPage extends StatefulWidget {
@@ -9,6 +10,8 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
+  int _currentIndex = 1;
+
   // Current day
   DateTime _focusedDay = DateTime.now();
 
@@ -21,10 +24,20 @@ class _CalendarPageState extends State<CalendarPage> {
     DateTime(2025, 2, 9): ['Panic Attack - Occured'],
   };
 
+  Color bgColor = Color(0xFF4B6AC8);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Calendar')),
+      backgroundColor: bgColor,
+      appBar: AppBar(
+        title: Text(
+            'Calendar',
+            style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.bold)
+        ),
+        backgroundColor: bgColor,
+      ),
+      // backgroundColor: bgColor,
       body: Column(
         children: [
           // Calendar section
@@ -43,67 +56,82 @@ class _CalendarPageState extends State<CalendarPage> {
       bottomNavigationBar: BottomNavigationBar(
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today),
-            label: 'Calendar',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
         ],
-        currentIndex: 1,
+        currentIndex: _currentIndex,
         onTap: (index) {
-          // TODO: Handle navigation
+          setState(() {
+            _currentIndex = index;
+          });
+          if (_currentIndex == 0) {
+            Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => HomePage())
+            );
+          }
         },
       ),
     );
   }
 
   Widget _buildCalendar() {
-    return TableCalendar(
-      firstDay: DateTime.utc(2021),
-      lastDay: DateTime.utc(2050),
-      focusedDay: _focusedDay,
-      selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
-      calendarFormat: CalendarFormat.month,
-      startingDayOfWeek: StartingDayOfWeek.monday,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.0),
+        ),
+        child: TableCalendar(
+          firstDay: DateTime.utc(2021),
+          lastDay: DateTime.utc(2050),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
+          calendarFormat: CalendarFormat.month,
+          startingDayOfWeek: StartingDayOfWeek.monday,
 
-      // Handle day selection
-      onDaySelected: (selectedDay, focusedDay) {
-        setState(() {
-          _selectedDay = selectedDay;
-          _focusedDay = focusedDay;
-        });
-      },
+          // Handle day selection
+          onDaySelected: (selectedDay, focusedDay) {
+            setState(() {
+              _selectedDay = selectedDay;
+              _focusedDay = focusedDay;
+            });
+          },
 
-      // Calendar Styling
-      calendarStyle: CalendarStyle(
-        selectedDecoration: BoxDecoration(
-          color: Colors.blue,
-          shape: BoxShape.circle,
+          // Calendar Styling
+          calendarStyle: CalendarStyle(
+            selectedDecoration: BoxDecoration(
+              color: Colors.blue,
+              shape: BoxShape.circle,
+            ),
+            todayDecoration: BoxDecoration(
+              color: Colors.blueAccent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          // daysOfWeekStyle: DaysOfWeekStyle(
+          //   weekdayStyle: TextStyle(color: Colors.white),
+          //   weekendStyle: TextStyle(color: Colors.white),
+          // ),
+          headerStyle: HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: true,
+            leftChevronIcon: Icon(Icons.chevron_left, color: bgColor),
+            rightChevronIcon: Icon(Icons.chevron_right, color: bgColor),
+            titleTextStyle: TextStyle(
+              color: bgColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          // Provide events for each day if needed
+          eventLoader: (day) {
+            return _events[DateTime(day.year, day.month, day.day)] ?? [];
+          },
         ),
-        todayDecoration: BoxDecoration(
-          color: Colors.blueAccent,
-          shape: BoxShape.circle,
-        ),
-      ),
-      headerStyle: HeaderStyle(
-        formatButtonVisible: false,
-        titleCentered: true,
-        leftChevronIcon: Icon(Icons.chevron_left, color: Colors.blue),
-        rightChevronIcon: Icon(Icons.chevron_right, color: Colors.blue),
-        titleTextStyle: TextStyle(
-          color: Colors.blue,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
-        decoration: BoxDecoration(color: Colors.blue),
-      ),
-      // Provide events for each day if needed
-      eventLoader: (day) {
-        return _events[DateTime(day.year, day.month, day.day)] ?? [];
-      },
+      )
     );
   }
 
@@ -218,7 +246,7 @@ class _CalendarPageState extends State<CalendarPage> {
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: bgColor,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
