@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:soothesync/home.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:soothesync/backend/dbhelper.dart';
+import 'package:soothesync/backend/log.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({Key? key}) : super(key: key);
@@ -16,13 +20,92 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
 
   // Selected day
-  DateTime? _selectedDay;
+  DateTime? _selectedDay = DateTime.now();
 
   // Example event log
   // TODO: event log logic
-  Map<DateTime, List<String>> _events = {
-    DateTime(2025, 2, 9): ['Panic Attack - Occured'],
-  };
+  List<Map<String, dynamic>> anxietyLogs = [];
+  List<String> selectedSymptoms = [];
+  String? _docId = "";
+
+  void realTimeListen() {
+    FirebaseFirestore.instance.collection('anxiety_logs').snapshots().listen((
+      snapshot,
+    ) {
+      setState(() {
+        anxietyLogs =
+            snapshot.docs.map((doc) {
+              return {
+                'date': doc['dateTime'], // Firestore Timestamp
+                'heartRate': doc['heartRate'],
+                'oxygenLevel': doc['oxygenLevel'],
+                'anxietyScore': doc['anxietyScore'],
+                'symptoms':
+                    doc['symptoms'] != null
+                        ? List<String>.from(doc['symptoms'])
+                        : [],
+                'docId': doc.id, // Ensure docId is included
+              };
+            }).toList();
+      });
+    });
+  }
+
+  // Future<void> fetchAllLogs() async {
+  //   final firestore = FirebaseFirestore.instance;
+  //   final querySnapshot = await firestore.collection('anxiety_logs').get();
+
+  //   querySnapshot.docs.forEach((doc) {
+  //     print('Document ID: ${doc.id}');
+  //   });
+
+  //   setState(() {
+  //     anxietyLogs =
+  //         querySnapshot.docs.map((doc) {
+  //           return {
+  //             'date': doc['dateTime'],
+  //             'heartRate': doc['heartRate'],
+  //             'oxygenLevel': doc['oxygenLevel'],
+  //             'anxietyScore': doc['anxietyScore'],
+  //             'severityLevel': doc['severityLevel'],
+  //             'symptoms': List<String>.from(doc['symptoms']),
+  //             'docId': doc.id,
+  //           };
+  //         }).toList();
+  //   });
+  // }
+
+  Future<void> addSymptoms(List<String> selectedSymptoms, String? docId) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final docRef = firestore.collection('anxiety_logs').doc(docId);
+      await docRef.update({
+        'symptoms': FieldValue.arrayUnion(selectedSymptoms),
+      });
+    } catch (e) {
+      print('Error adding symptoms: $e');
+    }
+  }
+
+  void _toggleSymptomSelection(String symptom) {
+    setState(() {
+      if (selectedSymptoms.contains(symptom)) {
+        selectedSymptoms.remove(symptom);
+      } else {
+        selectedSymptoms.add(symptom);
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    realTimeListen();
+    // Future.delayed(Duration(seconds: 1), () {
+    //   refresh();
+    //   _selectedDay = DateTime.now();
+    // });
+  }
 
   Color bgColor = Color(0xFF4B6AC8);
 
@@ -32,32 +115,44 @@ class _CalendarPageState extends State<CalendarPage> {
       backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
-            'Calendar',
-            style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.bold)
+          'Calendar',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         backgroundColor: bgColor,
       ),
-      // backgroundColor: bgColor,
-      body: Column(
-        children: [
-          // Calendar section
-          _buildCalendar(),
+      body: SingleChildScrollView(
+        // Wrap Column with SingleChildScrollView to make it scrollable
+        child: Column(
+          children: [
+            // Calendar section
+            _buildCalendar(),
 
-          // Log section
-          _buildLogSection(),
+            // Log section
+            _buildLogSection(),
 
-          // Symptoms section
-          _buildSymptomsSection(),
+            // Symptoms section
+            _buildSymptomsSection(),
 
-          // Consultation section
-          _buildConsultationSection(),
-        ],
+            // Consultation section
+            // _buildConsultationSection(),
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today),
+            label: 'Calendar',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
         ],
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -65,9 +160,9 @@ class _CalendarPageState extends State<CalendarPage> {
             _currentIndex = index;
           });
           if (_currentIndex == 0) {
-            Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => HomePage())
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HomePage()),
             );
           }
         },
@@ -96,6 +191,27 @@ class _CalendarPageState extends State<CalendarPage> {
             setState(() {
               _selectedDay = selectedDay;
               _focusedDay = focusedDay;
+              final log = anxietyLogs.firstWhere(
+                (log) =>
+                    (log['date'].toDate().year == selectedDay.year &&
+                        log['date'].toDate().month == selectedDay.month &&
+                        log['date'].toDate().day == selectedDay.day) ||
+                    (log['date'].toDate().year == focusedDay.year &&
+                        log['date'].toDate().month == focusedDay.month &&
+                        log['date'].toDate().day == focusedDay.day &&
+                        focusedDay.day == selectedDay.day),
+                orElse: () => {}, // Return null if no log is found
+              );
+
+              // Update selectedSymptoms with symptoms from the log
+              if (log.isNotEmpty) {
+                selectedSymptoms = List<String>.from(log['symptoms'] ?? []);
+                _docId = log['docId'];
+              } else {
+                selectedSymptoms = [];
+                _docId = null;
+              }
+              print('_docIdLog: $_docId'); // Debugging
             });
           },
 
@@ -110,10 +226,6 @@ class _CalendarPageState extends State<CalendarPage> {
               shape: BoxShape.circle,
             ),
           ),
-          // daysOfWeekStyle: DaysOfWeekStyle(
-          //   weekdayStyle: TextStyle(color: Colors.white),
-          //   weekendStyle: TextStyle(color: Colors.white),
-          // ),
           headerStyle: HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
@@ -128,54 +240,115 @@ class _CalendarPageState extends State<CalendarPage> {
 
           // Provide events for each day if needed
           eventLoader: (day) {
-            return _events[DateTime(day.year, day.month, day.day)] ?? [];
+            return anxietyLogs
+                .where(
+                  (log) =>
+                      log['date'].toDate().year == day.year &&
+                      log['date'].toDate().month == day.month &&
+                      log['date'].toDate().day == day.day,
+                )
+                .map((log) {
+                  return log['symptoms'];
+                })
+                .toList();
+            // return _eventLog[DateTime(day.year, day.month, day.day)] ?? [];
           },
         ),
-      )
+      ),
     );
   }
 
   Widget _buildLogSection() {
-    // Fetch events for the selected day
     final dayEvents =
-        _events[DateTime(
-          _selectedDay?.year ?? _focusedDay.year,
-          _selectedDay?.month ?? _focusedDay.month,
-          _selectedDay?.day ?? _focusedDay.day,
-        )] ??
-        [];
+        anxietyLogs
+            .where(
+              (log) =>
+                  log['date'].toDate().year == _focusedDay.year &&
+                  log['date'].toDate().month == _focusedDay.month &&
+                  log['date'].toDate().day == _focusedDay.day,
+            )
+            .toList();
 
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Log',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Text(
+                'Log',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
-          if (dayEvents.isEmpty)
-            Text('No events for this day.')
-          else
-            Column(
-              children:
-                  dayEvents.map((event) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(event.split(' - ').first),
-                        Text(event.split(' - ').last),
-                      ],
-                    );
-                  }).toList(),
+          SizedBox(height: 4),
+
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (dayEvents.isEmpty)
+                  Text('No events for this day.')
+                else
+                  Text('Anxiety Attack Occured'),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildSymptomsSection() {
-    // TODO: Symptoms list and logic
+    // Find the log for the selected day, if any
+    // final log = anxietyLogs.where(
+    //   (log) =>
+    //       log['date'].toDate().year == _focusedDay.year &&
+    //       log['date'].toDate().month == _focusedDay.month &&
+    //       log['date'].toDate().day == _focusedDay.day,
+    // ).toList();
+
+    print(selectedSymptoms); // Debugging line
+
+    final log = anxietyLogs.firstWhere(
+      (log) =>
+          (_selectedDay != null &&
+              log['date'].toDate().year == _selectedDay!.year &&
+              log['date'].toDate().month == _selectedDay!.month &&
+              log['date'].toDate().day == _selectedDay!.day) ||
+          (_focusedDay != null &&
+              log['date'].toDate().year == _focusedDay!.year &&
+              log['date'].toDate().month == _focusedDay!.month &&
+              log['date'].toDate().day == _focusedDay!.day),
+      orElse: () => {}, // Return an empty map if no log is found
+    );
+
+    // If no log is found for the selected day, return a message
+    if (log.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+        child: Text(
+          'No log found for the selected day.',
+          style: TextStyle(fontSize: 16, color: Colors.white),
+        ),
+      );
+    }
+
+    _docId = log['docId']; // Extract docId from the found log
+    print('_docId: $_docId'); // Debugging line
+    print('Log: $log'); // Debugging line
+
     final symptoms = [
       'Palpitations',
       'Intense Fear',
@@ -185,142 +358,171 @@ class _CalendarPageState extends State<CalendarPage> {
       'Numbness',
     ];
 
-    return Expanded(
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Symptoms',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      // TODO: Handle add symptom
-                    },
-                    child: Text('Add More'),
-                  ),
-                ],
-              ),
-              SizedBox(height: 8),
-
-              // Symptoms list
-              Expanded(
-                child: ListView.builder(
-                  itemCount: symptoms.length,
-                  itemBuilder: (context, index) {
-                    return Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        title: Text(symptoms[index]),
-                        trailing: Icon(Icons.add),
-                        onTap: () {
-                          // TODO: Add symptom logic
-                        },
-                      ),
-                    );
-                  },
+              Text(
+                'Symptoms',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
               ),
             ],
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: IconButton(
+              onPressed: () {
+                if (_docId != null && selectedSymptoms.isNotEmpty) {
+                  // Update the symptoms in Firestore
+                  addSymptoms(selectedSymptoms, _docId);
+                } else {
+                  if (_docId != null) {
+                    print('Cannot save symptoms: No symptoms selected.');
+                  } else {
+                    print(
+                      'Cannot save symptoms: No log found for the selected day.',
+                    );
+                  }
+                }
+              },
+              icon: Icon(Icons.save),
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: 4),
+          Container(
+            height: 400,
+            child: ListView.builder(
+              itemCount: symptoms.length,
+              itemBuilder: (context, index) {
+                return Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    title: Text(symptoms[index]),
+                    trailing: Icon(
+                      selectedSymptoms.contains(symptoms[index])
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                    ),
+                    onTap: () {
+                      _toggleSymptomSelection(symptoms[index]);
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildConsultationSection() {
-    return Container(
-      margin: const EdgeInsets.all(16.0),
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            blurRadius: 5,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              // Left side
-              Row(
-                children: [
-                  Text(
-                    'Doctor ABCDE',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(
-                    Icons.delete,
-                    color: Colors.blue,
-                    size: 20,
-                  ),
-                ],
-              ),
-
-              // Right side
-              Row(
-                children: [
-                  Icon(
-                    Icons.notifications,
-                    color: Colors.blue,
-                    size: 20,
-                  ),
-                  SizedBox(width: 4),
-                  Text('16.00 - 20.00', style: TextStyle(fontSize: 14, color: Colors.blue),),
-                ],
+              Text(
+                'Symptoms',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
+          Container(
+            margin: const EdgeInsets.only(top: 8.0),
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.2),
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Left side
+                    Row(
+                      children: [
+                        Text(
+                          'Doctor ABCDE',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.delete, color: Colors.blue, size: 20),
+                      ],
+                    ),
 
-          SizedBox(height: 8),
+                    // Right side
+                    Row(
+                      children: [
+                        Icon(Icons.notifications, color: Colors.blue, size: 20),
+                        SizedBox(width: 4),
+                        Text(
+                          '16.00 - 20.00',
+                          style: TextStyle(fontSize: 14, color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
 
-          // Hospital address
-          Text(
-            'Santo Borromeus Hospital, Jl. Ir. H. Juanda No. 100',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.black,
+                SizedBox(height: 8),
+
+                // Hospital address
+                Text(
+                  'Santo Borromeus Hospital, Jl. Ir. H. Juanda No. 100',
+                  style: TextStyle(fontSize: 14, color: Colors.black),
+                ),
+                SizedBox(height: 4),
+
+                // Contact number
+                Text(
+                  'Insert contact number',
+                  style: TextStyle(fontSize: 14, color: Colors.black),
+                ),
+                SizedBox(height: 4),
+              ],
             ),
           ),
-          SizedBox(height: 4),
-
-          // Contact number
-          Text(
-            'Insert contact number',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.black,
-            ),
-          ),
-          SizedBox(height: 4),
         ],
       ),
     );
   }
+}
+
+class LogEvents {
+  final DateTime date;
+  final List<String> symptoms;
+
+  LogEvents({required this.date, required this.symptoms});
 }

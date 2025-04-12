@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:soothesync/backend/dbhelper.dart';
+import 'package:soothesync/backend/log.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:soothesync/firebase_options.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -8,31 +15,39 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  // Example history data
+  List<Map<String, dynamic>> anxietyLogs = [];
 
-  final List<HistoryItem> historyData = [
-    HistoryItem(
-      date: 'Today, 23 April 2025',
-      heartRate: 82,
-      oxygenLevel: 98,
-      anxietyScore: 7,
-      severityLevel: 'High',
-    ),
-    HistoryItem(
-      date: 'Tuesday, 22 April 2025',
-      heartRate: 82,
-      oxygenLevel: 98,
-      anxietyScore: 7,
-      severityLevel: 'High',
-    ),
-    HistoryItem(
-      date: 'Monday, 21 April 2025',
-      heartRate: 82,
-      oxygenLevel: 98,
-      anxietyScore: 7,
-      severityLevel: 'High',
-    ),
-  ];
+  void realTimeListen() {
+    FirebaseFirestore.instance.collection('anxiety_logs').snapshots().listen((
+      snapshot,
+    ) {
+      setState(() {
+        anxietyLogs =
+            snapshot.docs.map((doc) {
+              return {
+                'date': doc['dateTime'],
+                'heartRate': doc['heartRate'],
+                'oxygenLevel': doc['oxygenLevel'],
+                'anxietyScore': doc['anxietyScore'],
+                'symptoms': List<String>.from(doc['symptoms']),
+              };
+            }).toList();
+        
+        anxietyLogs.sort((a, b) {
+          Timestamp dateA = a['date'];
+          Timestamp dateB = b['date'];
+
+          return dateB.compareTo(dateA); // Sort in descending order
+        });
+      });
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    realTimeListen();
+  }
 
   Color bgColor = Color(0xFF4B6AC8);
 
@@ -46,23 +61,38 @@ class _HistoryPageState extends State<HistoryPage> {
             Navigator.pop(context);
           },
         ),
-        title: Text('History', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(
+          'History',
+          style: TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: bgColor,
       ),
       backgroundColor: bgColor,
-      body: ListView.separated(
-        padding: EdgeInsets.all(16.0),
-        itemCount: historyData.length,
-        separatorBuilder: (context, index) => const Divider(),
-        itemBuilder: (context, index) {
-          final item = historyData[index];
-          return _buildHistoryItem(item);
-        },
-      ),
+      body:
+          anxietyLogs.isEmpty
+              ? Center(
+                child: Text(
+                  'No history available',
+                  style: TextStyle(color: Colors.white, fontSize: 20),
+                ),
+              )
+              : ListView.separated(
+                padding: EdgeInsets.all(16.0),
+                itemCount: anxietyLogs.length,
+                separatorBuilder: (context, index) => const Divider(),
+                itemBuilder: (context, index) {
+                  final log = anxietyLogs[index];
+                  return _buildHistoryCard(log);
+                },
+              ),
     );
   }
 
-  Widget _buildHistoryItem(HistoryItem item) {
+  Widget _buildHistoryCard(Map<String, dynamic> log) {
     Color bgColor = Color(0xFF4B6AC8);
     return Container(
       margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
@@ -72,7 +102,7 @@ class _HistoryPageState extends State<HistoryPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            item.date,
+            DateFormat('EEEE, MMMM d yyyy').format(log['date'].toDate()),
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -80,14 +110,15 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
           ),
           SizedBox(height: 8),
-          _buildRow('Average Heart Rate', '${item.heartRate}', 'bpm'),
-          _buildRow('Oxygen Level', '${item.oxygenLevel}', '%'),
-          _buildRow('Anxiety Score', '${item.anxietyScore}', ''),
-          _buildRow('Severity Level', item.severityLevel, ''),
+          _buildRow('Heart Rate Variability', '${log['heartRate']}', ''),
+          _buildRow('Oxygen Saturation', '${log['oxygenLevel']}', '%'),
+          _buildRow('Anxiety Score', '${log['anxietyScore']}', ''),
+          _buildRow('Severity Level', '${log['anxietyScore']}', ''),
         ],
       ),
     );
   }
+
 
   Widget _buildRow(String label, String value, String metric) {
     return Padding(
@@ -96,28 +127,46 @@ class _HistoryPageState extends State<HistoryPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: Colors.white, fontSize: 16)),
-          Text(
-            '$value $metric',
-            style: TextStyle(color: Colors.white, fontSize: 16),
-          ),
+          if (label == 'Severity Level') ...[
+              if (value == '1') ...[
+                Text(
+                  'Minimal',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ] else if (value == '2') ...[
+                Text(
+                  'Mild',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ] else if (value == '3') ...[
+                Text(
+                  'Moderate',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ] else if (value == '4') ...[
+                Text(
+                  'Severe',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ] else if (value == '5') ...[
+                Text(
+                  'Debilitating',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ] else ...[
+                Text(
+                  'Unknown',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ]
+            ] else ...[
+            Text(
+              '$value $metric',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            ],
         ],
       ),
     );
   }
-}
-
-class HistoryItem {
-  final String date;
-  final int heartRate;
-  final int oxygenLevel;
-  final int anxietyScore;
-  final String severityLevel;
-
-  HistoryItem({
-    required this.date,
-    required this.heartRate,
-    required this.oxygenLevel,
-    required this.anxietyScore,
-    required this.severityLevel,
-  });
 }
