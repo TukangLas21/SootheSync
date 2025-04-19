@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:soothesync/medication.dart';
-import 'package:soothesync/backend/dbhelper.dart';
-import 'package:soothesync/backend/log.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
