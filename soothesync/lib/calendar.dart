@@ -20,7 +20,7 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
 
   // Selected day
-  DateTime? _selectedDay = DateTime.now();
+  DateTime? _selectedDay;
 
   // Example event log
   // TODO: event log logic
@@ -79,9 +79,27 @@ class _CalendarPageState extends State<CalendarPage> {
     try {
       final firestore = FirebaseFirestore.instance;
       final docRef = firestore.collection('anxiety_logs').doc(docId);
+
+      // Fetch the existing symptoms array from the document
+      DocumentSnapshot docSnapshot = await docRef.get();
+      List<String> currentSymptoms = List<String>.from(docSnapshot['symptoms'] ?? []);
+
+      // Find the symptoms to remove (those that are no longer in selectedSymptoms)
+      List<String> symptomsToRemove = currentSymptoms.where((symptom) => !selectedSymptoms.contains(symptom)).toList();
+
+      // Find the symptoms to add (those that are in selectedSymptoms but not in currentSymptoms)
+      List<String> symptomsToAdd = selectedSymptoms.where((symptom) => !currentSymptoms.contains(symptom)).toList();
+
+      // Remove the old symptoms and add the new ones
       await docRef.update({
-        'symptoms': FieldValue.arrayUnion(selectedSymptoms),
+        'symptoms': FieldValue.arrayRemove(symptomsToRemove),
       });
+
+      if (symptomsToAdd.isNotEmpty) {
+        await docRef.update({
+          'symptoms': FieldValue.arrayUnion(symptomsToAdd),
+        });
+      }
     } catch (e) {
       print('Error adding symptoms: $e');
     }
@@ -101,10 +119,7 @@ class _CalendarPageState extends State<CalendarPage> {
   void initState() {
     super.initState();
     realTimeListen();
-    // Future.delayed(Duration(seconds: 1), () {
-    //   refresh();
-    //   _selectedDay = DateTime.now();
-    // });
+    // fetchAllLogs();
   }
 
   Color bgColor = Color(0xFF4B6AC8);
