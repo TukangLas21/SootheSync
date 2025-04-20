@@ -13,7 +13,9 @@ SootheSync Mobile App is a mobile application that's built with Flutter for ITB 
 - Calendar to track and log previous anxiety attacks
 
 ## Screenshots
-Screenshots will follow soon!
+| Home | History | Medication | Add/Edit Medication | Calendar |
+|----------|----------|----------|----------|----------|
+| <img src="doc/Screenshots/home.jpeg" width="200"> | <img src="doc/Screenshots/history.jpeg" width="200"> | <img src="doc/Screenshots/medication.jpeg" width="200"> | <img src="doc/Screenshots/addedit_medication.jpeg" width="200"> | <img src="doc/Screenshots/calendar.jpeg" width="200"> |
 
 ## Getting Started
 
